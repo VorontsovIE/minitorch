@@ -64,19 +64,6 @@ class ReLu(Layer):
     def backward(self, vec):
         return (self.input > 0) * vec
 
-
-class SoftMax(Layer):
-    def forward(self, vec):
-        self.input = vec
-        exps = np.exp(vec)
-        return exps / np.sum(exps)
-    def backward(self, vec):
-        exps = np.exp(self.input).squeeze()
-        normed_exps = exps / np.sum(exps)
-        jacobian = np.diag(normed_exps) - normed_exps @ np.transpose(normed_exps)
-        return jacobian @ vec
-
-
 class Sequential(Layer):
     def __init__(self, layers):
         self.layers = layers
@@ -97,59 +84,121 @@ class Sequential(Layer):
             layer.step_grad(rate)
 
 
-class CrossEntropyLoss:
-    def forward(self, vec, label):
+
+class SoftMax(Layer):
+    def forward(self, vec):
         self.input = vec
+        exps = np.exp(vec)
+        return exps / np.sum(exps)
+    def backward(self, vec):
+        exps = np.exp(self.input).squeeze()
+        normed_exps = exps / np.sum(exps)
+        jacobian = np.diag(normed_exps) - normed_exps @ np.transpose(normed_exps)
+        return jacobian @ vec
+
+
+class CrossEntropyLoss:
+    '''
+    Cross entropy of soft-maxed input against a certain class label.
+    NOTE! Input vector is raw values, not probabilites vector.
+          Softmax of input is calculated inside of CE-loss.
+    '''
+    def forward(self, vec, label):
+        # H = -p*log(q) where p is actual class distribution, q is predicted distribution
+        #   = -1*log(q_l) = -log(SoftMax_l(v_1..v_n))  where l is label
+        #   = -log(\exp{v_l} / (\sum_k \exp{v_k}) )
+        #   = log(\sum_k \exp{v_k}) - v_l
+        #   = log(\exp{m}\sum_k \exp{v_k - m}) - v_l   for any m
+        #   = log(\sum_k \exp{v_k - m}) + m - v_l      we put m = max(v_k)
+        #   = log(\sum_k \exp{w_k}) - w_l              where w_i = v_i - m
         self.label = label
-        return -math.log(vec[label])
+        shifted_vec = vec - np.max(vec)
+        shifted_exp = np.exp(shifted_vec)
+        exp_sum = np.sum(shifted_exp)
+        self.shifted_vec = shifted_vec
+        self.shifted_exp = shifted_exp
+        self.exp_sum = exp_sum
+        return math.log(exp_sum) - shifted_vec[label]
+    #
     def backward(self):
-        result = np.zeros_like(self.input)
-        result[self.label] = -1.0 / self.input[self.label]
+        # dH/dx_i = \exp{v_i} / (\sum_k\exp{v_k}) - \delta_{i,l} =
+        #         = \exp{v_i - m} / (\sum_k\exp{v_k - m}) - \delta_{i,l}
+        #         = \exp{w_i} / (\sum_k\exp{w_k}) - \delta_{i,l}
+        result = self.shifted_exp / self.exp_sum
+        result[self.label] -= 1
         return result
 
+def softmax(vec):
+    shifted_vec = vec - np.max(vec)
+    shifted_exp = np.exp(shifted_vec)
+    exp_sum = np.sum(shifted_exp)
+    return shifted_exp / exp_sum
 
 
-def predict_label(probs):
-    return np.argmax(probs.squeeze())
+def accuracy(model, data, labels):
+    num_samples = data.shape[1]
+    correct = 0
+    for idx in range(num_samples):
+        sample = np.expand_dims(data[:, idx], 1)
+        activations = model.forward(sample)
+        if predict_label(activations) == labels[idx]:
+            correct += 1
+    return correct / num_samples
 
-pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
-neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
-data = np.hstack([pos, neg])
-labels = np.hstack([1 * np.ones(pos.shape[1], dtype=int), 0 * np.ones(neg.shape[1], dtype=int)])
+
+def predict_label(activations):
+    return np.argmax(activations.squeeze())
+
+
+
 # pos — label 1
 # neg — label 0
+train_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
+train_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
+train_data = np.hstack([train_pos, train_neg])
+train_labels = np.hstack([1 * np.ones(train_pos.shape[1], dtype=int), 0 * np.ones(train_neg.shape[1], dtype=int)])
+
+test_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
+test_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
+test_data = np.hstack([test_pos, test_neg])
+test_labels = np.hstack([1 * np.ones(test_pos.shape[1], dtype=int), 0 * np.ones(test_neg.shape[1], dtype=int)])
+
 
 lin_1 = Linear(np.random.normal(size=(2,2)), l2_coef = 1)
-sm = SoftMax()
-nn = Sequential([lin_1, sm])
+nn = Sequential([lin_1])
 ce = CrossEntropyLoss()
+
+accuracy(nn, train_data, train_labels)
+accuracy(nn, test_data, test_labels)
 
 num_samples = data.shape[1]
 
-lin_1.weights = np.array([[ 0.2310601,  -1.35196172],[ 0.49964013,  1.6349675 ]])
+# lin_1.weights = np.array([[ 0.2310601, -1.35196172], [ 0.49964013, 1.6349675 ]])
 print(lin_1.weights)
-for _ in range(5):
+for _ in range(100):
     nn.zero_grad()
     total_loss = 0
     for idx in range(num_samples):
         sample = np.expand_dims(data[:, idx], 1)
-        probs = nn.forward(sample)
-        loss = ce.forward(probs, labels[idx])
+        label = labels[idx]
+        activations = nn.forward(sample)
+        loss = ce.forward(activations, labels[idx])
+        probs = softmax(activations)
         if np.isnan(loss):
             print(f"(rejected) sample: {sample.squeeze()}; probs: {probs.squeeze()}; label: {label}; loss: {loss};")
             continue
-        print(f"sample: {sample.squeeze()}; probs: {probs.squeeze()}; label: {label}; loss: {loss};")
+        # print(f"sample: {sample.squeeze()}; probs: {probs.squeeze()}; label: {label}; loss: {loss};")
         total_loss += loss
         grad_by_input = nn.backward(ce.backward())
-        print(f"grad: {lin_1.grad}")
+        # print(f"grad: {lin_1.grad}")
     nn.backward_regularization(rate=num_samples)
-    nn.step_grad(0.00001)
-    print(f"(after regularization) grad: {lin_1.grad}")
+    nn.step_grad(0.001)
+    # print(f"(after regularization) grad: {lin_1.grad}")
     total_loss += num_samples * nn.regularization_loss()
     print(f"Total loss: {total_loss / data.shape[1]}")
-    print([predict_label(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)])
+    # print([predict_label(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)])
 
-[predict_label(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)]
+# [predict_label(softmax(nn.forward( np.expand_dims(data[:,idx], 1) )))  for idx in range(num_samples)]
+# [softmax(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)]
 
 # idx = 1; sample = np.expand_dims(data[:, idx], 1); probs = nn.forward(sample); loss = ce.forward(probs, labels[idx]);print(f"------\nidx: {idx}");print(f"probs: {probs.squeeze()}"); print(f"loss: {loss}"); print(f"backward: {ce.backward().squeeze()}");
-
