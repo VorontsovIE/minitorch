@@ -20,10 +20,10 @@ class ImageClassificationModel:
     def forward(self, vec: np.ndarray) -> np.ndarray:
         return self.model.forward(vec)
 
-    def backward(self, vec: np.ndarray):
+    def backward(self, vec: np.ndarray) -> np.ndarray:
         return self.model.backward(vec)
 
-    def backward_regularization(self, rate:float=1):
+    def backward_regularization(self, rate: float = 1):
         return self.model.backward_regularization(rate)
 
     def regularization_loss(self) -> float:
@@ -35,7 +35,7 @@ class ImageClassificationModel:
     def step_grad(self, rate: float):
         return self.model.step_grad(rate)
     
-    def store(self, filename):
+    def store(self, filename: str):
         np.savez_compressed(filename,
             linear_1=self._linear_1.weights,
             linear_2=self._linear_2.weights,
@@ -44,7 +44,7 @@ class ImageClassificationModel:
         )
 
     @classmethod
-    def load(cls, filename):
+    def load(cls, filename: str) -> ImageClassificationModel:
         with np.load(filename) as data:
             linear_1 = data['linear_1']
             linear_2 = data['linear_2']
@@ -61,7 +61,7 @@ class ImageClassificationModel:
         )
 
     @classmethod
-    def initialize_random(cls, input_size=28*28, hidden_size=300):
+    def initialize_random(cls, input_size: int = 28*28, hidden_size: int = 300) -> ImageClassificationModel:
         l2_coef = 0.01 / (input_size + hidden_size + cls.num_classes)
         linear_1  = Linear(np.random.normal(size=(hidden_size, input_size)), l2_coef=l2_coef)
         bias_1 = Bias(np.random.normal(size=(hidden_size, 1)), l2_coef=l2_coef)

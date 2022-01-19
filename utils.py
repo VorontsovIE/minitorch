@@ -37,7 +37,7 @@ def train_test_split(data: np.ndarray,
     else:
         return [data[index_set]  for index_set in index_sets]
 
-def accuracy(model, data, labels):
+def accuracy(model, data: np.ndarray, labels: Sequence) -> float:
     num_samples = data.shape[0]
     correct = 0
     for idx in range(num_samples):
@@ -47,18 +47,18 @@ def accuracy(model, data, labels):
             correct += 1
     return correct / num_samples
 
-def softmax(vec):
+def softmax(vec: np.ndarray) -> np.ndarray:
     shifted_vec = vec - np.max(vec)
     shifted_exp = np.exp(shifted_vec)
     exp_sum = np.sum(shifted_exp)
     return shifted_exp / exp_sum
 
 
-def predict_label(activations):
-    return np.argmax(activations.squeeze())
+def predict_label(activations: np.ndarray) -> int:
+    return np.argmax(activations.squeeze()).astype(int)
 
 class BatchSampler:
-    def __init__(self, data: np.ndarray, labels: Optional[Sequence] = None, batch_size=1):
+    def __init__(self, data: np.ndarray, labels: Optional[Sequence] = None, batch_size: int = 1):
         if (labels is not None) and (len(labels) != data.shape[0]):
             raise ValueError("Data and labels are of inconsistent sizes")
         self.data = data
