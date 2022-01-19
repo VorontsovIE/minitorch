@@ -2,6 +2,9 @@ import functools
 import math
 import numpy as np
 from typing import Tuple, List
+import logging
+
+logger = logging.getLogger('minitorch')
 
 class Layer:
     def forward(self, vec):
@@ -35,27 +38,33 @@ class Linear(Layer):
     def zero_grad(self):
         self.grad = np.zeros_like(self.weights)
     def step_grad(self, rate):
+        if np.any(np.isnan(self.grad) | np.isinf(self.grad)):
+            logger.warning("Weights update failed: NaN/Inf gradients. Skip the batch.")
+            return
         self.weights -= rate * self.grad
 
 class Bias(Layer):
-    def __init__(self, bias, l2_coef=1.0):
-        self.bias = bias
-        self.grad = np.zeros_like(self.bias)
+    def __init__(self, weights, l2_coef=1.0):
+        self.weights = weights
+        self.grad = np.zeros_like(self.weights)
         self.l2_coef = l2_coef
     def forward(self, vec):
         self.input = vec
-        return self.bias + vec
+        return self.weights + vec
     def backward(self, vec):
         self.grad += vec
         return vec
     def backward_regularization(self, rate=1):
-        self.grad += 2 * rate * self.l2_coef * self.bias
+        self.grad += 2 * rate * self.l2_coef * self.weights
     def regularization_loss(self):
-        return self.l2_coef * np.sum(self.bias ** 2)
+        return self.l2_coef * np.sum(self.weights ** 2)
     def zero_grad(self):
-        self.grad = np.zeros_like(self.bias)
+        self.grad = np.zeros_like(self.weights)
     def step_grad(self, rate):
-        self.bias -= rate * self.grad
+        if np.any(np.isnan(self.grad) | np.isinf(self.grad)):
+            logger.warning("Weights update failed: NaN/Inf gradients. Skip the batch.")
+            return
+        self.weights -= rate * self.grad
 
 class ReLu(Layer):
     def forward(self, vec):
