@@ -10,7 +10,7 @@ logging.basicConfig(format=FORMAT, level='DEBUG')
 logger = logging.getLogger('minitorch')
 
 def main():
-    seed = 138
+    seed = 137
     random.seed(seed)
     np.random.seed(seed)
 
@@ -21,12 +21,18 @@ def main():
 
     input_size = 28*28 # size of image
     num_classes = 10
-    train_labels = read_labels(train_labels_fn)
+    train_val_labels = read_labels(train_labels_fn)
     test_labels  = read_labels(test_labels_fn)
     # realign images pixels into a single vector
-    train_data = read_images(train_images_fn).reshape(-1, input_size)
+    train_val_data = read_images(train_images_fn).reshape(-1, input_size)
     test_data  = read_images(test_images_fn).reshape(-1, input_size)
 
+    (train_data, train_labels), (validation_data, validation_labels) = train_test_split(
+        data=train_val_data,
+        labels=train_val_labels,
+        sample_set_rates=(0.9, 0.1)
+    )
+    # One should use metrics on validation for hyperparameter tuning (I didn't)
     logger.info('Data loaded')
 
     hidden_size_1 = 300
@@ -39,9 +45,11 @@ def main():
     ce = CrossEntropyLoss()
     batch_size = 16
     learning_rate = 0.00001
-    num_epochs = 1000
+    # num_epochs = 25
+    num_epochs = 2
 
     logger.info(f'(before training) Train accuracy: {accuracy(nn, train_data, train_labels)}')
+    logger.info(f'(before training) Validation accuracy: {accuracy(nn, validation_data, validation_labels)}')
     logger.info(f'(before training) Test accuracy: {accuracy(nn, test_data, test_labels)}')
 
     batch_sampler = BatchSampler(train_data, train_labels, batch_size=batch_size)
@@ -79,7 +87,9 @@ def main():
           f"Regularization loss: {num_samples * nn.regularization_loss()}"
         )
         logger.info(f'Train accuracy: {accuracy(nn, train_data, train_labels)}')
-        logger.info(f'Test accuracy: {accuracy(nn, test_data, test_labels)}')
+        logger.info(f'Validation accuracy: {accuracy(nn, validation_data, validation_labels)}')
+
+    logger.info(f'Test accuracy: {accuracy(nn, test_data, test_labels)}')
 
 if __name__ == '__main__':
     main()
