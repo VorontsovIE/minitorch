@@ -1,24 +1,35 @@
 import numpy as np
 import random
-from utils import train_test_split, BatchSampler
+from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy
+from layers import Sequential, Linear, Bias, ReLu, LeakyReLu, CrossEntropyLoss
 
 def main():
     seed = 138
     random.seed(seed)
     np.random.seed(seed)
 
+    # train_labels_fn = 'mnist_data/train-labels-idx1-ubyte'
+    # train_images_fn = 'mnist_data/train-images-idx3-ubyte'
+    # test_labels_fn  = 'mnist_data/t10k-labels-idx1-ubyte'
+    # test_images_fn  = 'mnist_data/t10k-images-idx3-ubyte'
+
+    # train_labels = read_labels(train_labels_fn)
+    # train_images = read_images(train_images_fn)
+    # test_labels = read_labels(test_labels_fn)
+    # test_images = read_images(test_images_fn)
+
+
     # pos — label 1
     # neg — label 0
-    train_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
-    train_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
-    train_data = np.hstack([train_pos, train_neg])
-    train_labels = np.hstack([1 * np.ones(train_pos.shape[1], dtype=int), 0 * np.ones(train_neg.shape[1], dtype=int)])
+    train_pos = np.random.normal(size=(10, 2), loc=(5.0, 1.0), scale=1.0)
+    train_neg = np.random.normal(size=(10, 2), loc=(1.0, 5.0), scale=1.0)
+    train_data = np.vstack([train_pos, train_neg])
+    train_labels = np.vstack([1 * np.ones((train_pos.shape[0], 1), dtype=int), 0 * np.ones((train_neg.shape[0], 1), dtype=int)])
 
-    test_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
-    test_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
-    test_data = np.hstack([test_pos, test_neg])
-    test_labels = np.hstack([1 * np.ones(test_pos.shape[1], dtype=int), 0 * np.ones(test_neg.shape[1], dtype=int)])
-
+    test_pos = np.random.normal(size=(10, 2), loc=(5.0, 1.0), scale=1.0)
+    test_neg = np.random.normal(size=(10, 2), loc=(1.0, 5.0), scale=1.0)
+    test_data = np.vstack([test_pos, test_neg])
+    test_labels = np.vstack([1 * np.ones((test_pos.shape[0],1), dtype=int), 0 * np.ones((test_neg.shape[0],1), dtype=int)])
 
     l2_coef = 0.01
     lin_1 = Linear(np.random.normal(size=(3,2)), l2_coef = l2_coef)
@@ -43,7 +54,7 @@ def main():
         for (batch_samples, batch_labels) in batch_sampler:
             cur_batch_size = len(batch_labels)
             nn.zero_grad()
-            for (sample, label) in zip(batch_samples.T, batch_labels):
+            for (sample, label) in zip(batch_samples, batch_labels):
                 # NN forwarding of entire batches not yet implemented, so we just loop batches
                 sample = np.expand_dims(sample, 1)
                 activations = nn.forward(sample)

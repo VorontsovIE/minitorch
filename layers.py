@@ -93,7 +93,6 @@ class Sequential(Layer):
             layer.step_grad(rate)
 
 
-
 class SoftMax(Layer):
     def forward(self, vec):
         self.input = vec
@@ -136,24 +135,3 @@ class CrossEntropyLoss:
         result = self.shifted_exp / self.exp_sum
         result[self.label] -= 1
         return result
-
-def softmax(vec):
-    shifted_vec = vec - np.max(vec)
-    shifted_exp = np.exp(shifted_vec)
-    exp_sum = np.sum(shifted_exp)
-    return shifted_exp / exp_sum
-
-
-def accuracy(model, data, labels):
-    num_samples = data.shape[1]
-    correct = 0
-    for idx in range(num_samples):
-        sample = np.expand_dims(data[:, idx], 1)
-        activations = model.forward(sample)
-        if predict_label(activations) == labels[idx]:
-            correct += 1
-    return correct / num_samples
-
-
-def predict_label(activations):
-    return np.argmax(activations.squeeze())
