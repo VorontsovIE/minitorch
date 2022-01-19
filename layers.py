@@ -1,6 +1,9 @@
 import functools
 import math
 import numpy as np
+import random
+from typing import Tuple, List
+from utils import train_test_split, BatchSampler
 
 class Layer:
     def forward(self, vec):
@@ -56,13 +59,21 @@ class Bias(Layer):
     def step_grad(self, rate):
         self.bias -= rate * self.grad
 
-
 class ReLu(Layer):
     def forward(self, vec):
         self.input = vec
         return (vec > 0) * vec
     def backward(self, vec):
         return (self.input > 0) * vec
+
+class LeakyReLu(Layer):
+    def __init__(self, alpha):
+        self.alpha = alpha
+    def forward(self, vec):
+        self.input = vec
+        return np.where(vec > 0, vec, vec * self.alpha)
+    def backward(self, vec):
+        return np.where(self.input > 0, 1, self.alpha) * vec
 
 class Sequential(Layer):
     def __init__(self, layers):
@@ -149,56 +160,65 @@ def accuracy(model, data, labels):
 def predict_label(activations):
     return np.argmax(activations.squeeze())
 
+def main():
+    seed = 138
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # pos — label 1
+    # neg — label 0
+    train_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
+    train_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
+    train_data = np.hstack([train_pos, train_neg])
+    train_labels = np.hstack([1 * np.ones(train_pos.shape[1], dtype=int), 0 * np.ones(train_neg.shape[1], dtype=int)])
+
+    test_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
+    test_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
+    test_data = np.hstack([test_pos, test_neg])
+    test_labels = np.hstack([1 * np.ones(test_pos.shape[1], dtype=int), 0 * np.ones(test_neg.shape[1], dtype=int)])
 
 
-# pos — label 1
-# neg — label 0
-train_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
-train_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
-train_data = np.hstack([train_pos, train_neg])
-train_labels = np.hstack([1 * np.ones(train_pos.shape[1], dtype=int), 0 * np.ones(train_neg.shape[1], dtype=int)])
+    l2_coef = 0.01
+    lin_1 = Linear(np.random.normal(size=(3,2)), l2_coef = l2_coef)
+    bias_1 = Bias(np.random.normal(size=(3,1)), l2_coef = l2_coef)
+    lin_2 = Linear(np.random.normal(size=(2,3)), l2_coef = l2_coef)
+    bias_2 = Bias(np.random.normal(size=(2,1)), l2_coef = l2_coef)
+    nn = Sequential([lin_1, bias_1, LeakyReLu(0.1), lin_2, bias_2, LeakyReLu(0.1)])
+    ce = CrossEntropyLoss()
 
-test_pos = np.random.normal(size=(10,2), loc=(5.0, 1.0), scale=1.0).transpose()
-test_neg = np.random.normal(size=(10,2), loc=(1.0, 5.0), scale=1.0).transpose()
-test_data = np.hstack([test_pos, test_neg])
-test_labels = np.hstack([1 * np.ones(test_pos.shape[1], dtype=int), 0 * np.ones(test_neg.shape[1], dtype=int)])
+    print('Train accuracy:', accuracy(nn, train_data, train_labels))
+    print('Test accuracy:', accuracy(nn, test_data, test_labels))
 
+    batch_sampler = BatchSampler(train_data, train_labels, batch_size=5)
 
-lin_1 = Linear(np.random.normal(size=(2,2)), l2_coef = 1)
-nn = Sequential([lin_1])
-ce = CrossEntropyLoss()
+    # num_samples = train_data.shape[1]
+    num_epochs = 1000
+    learning_rate = 0.001
 
-accuracy(nn, train_data, train_labels)
-accuracy(nn, test_data, test_labels)
+    for epoch in range(num_epochs):
+        total_loss = 0
+        total_loss_wo_regularization = 0
+        for (batch_samples, batch_labels) in batch_sampler:
+            cur_batch_size = len(batch_labels)
+            nn.zero_grad()
+            for (sample, label) in zip(batch_samples.T, batch_labels):
+                # NN forwarding of entire batches not yet implemented, so we just loop batches
+                sample = np.expand_dims(sample, 1)
+                activations = nn.forward(sample)
+                loss = ce.forward(activations, label)
+                probs = softmax(activations)
+                total_loss += loss
+                total_loss_wo_regularization += loss
+                grad_by_input = nn.backward(ce.backward())
+            nn.backward_regularization(rate=cur_batch_size)
+            total_loss += cur_batch_size * nn.regularization_loss()
+            nn.step_grad(learning_rate)
+        print('-' * 20 + '\n' + f'Epoch: {epoch}' )
+        print(f"Total loss: {total_loss / train_data.shape[1]}; " +
+              f"Total loss w/o regularization: {total_loss_wo_regularization / train_data.shape[1]}; " + 
+              f"Regularization loss: {len(train_labels) * nn.regularization_loss()}")
+        print('Train accuracy:', accuracy(nn, train_data, train_labels))
+        print('Test accuracy:', accuracy(nn, test_data, test_labels))
 
-num_samples = data.shape[1]
-
-# lin_1.weights = np.array([[ 0.2310601, -1.35196172], [ 0.49964013, 1.6349675 ]])
-print(lin_1.weights)
-for _ in range(100):
-    nn.zero_grad()
-    total_loss = 0
-    for idx in range(num_samples):
-        sample = np.expand_dims(data[:, idx], 1)
-        label = labels[idx]
-        activations = nn.forward(sample)
-        loss = ce.forward(activations, labels[idx])
-        probs = softmax(activations)
-        if np.isnan(loss):
-            print(f"(rejected) sample: {sample.squeeze()}; probs: {probs.squeeze()}; label: {label}; loss: {loss};")
-            continue
-        # print(f"sample: {sample.squeeze()}; probs: {probs.squeeze()}; label: {label}; loss: {loss};")
-        total_loss += loss
-        grad_by_input = nn.backward(ce.backward())
-        # print(f"grad: {lin_1.grad}")
-    nn.backward_regularization(rate=num_samples)
-    nn.step_grad(0.001)
-    # print(f"(after regularization) grad: {lin_1.grad}")
-    total_loss += num_samples * nn.regularization_loss()
-    print(f"Total loss: {total_loss / data.shape[1]}")
-    # print([predict_label(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)])
-
-# [predict_label(softmax(nn.forward( np.expand_dims(data[:,idx], 1) )))  for idx in range(num_samples)]
-# [softmax(nn.forward( np.expand_dims(data[:,idx], 1) ))  for idx in range(num_samples)]
-
-# idx = 1; sample = np.expand_dims(data[:, idx], 1); probs = nn.forward(sample); loss = ce.forward(probs, labels[idx]);print(f"------\nidx: {idx}");print(f"probs: {probs.squeeze()}"); print(f"loss: {loss}"); print(f"backward: {ce.backward().squeeze()}");
+if __name__ == '__main__':
+    main()
