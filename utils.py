@@ -1,6 +1,5 @@
 from typing import Tuple, List, Any, Optional, Sequence
 import numpy as np
-# import numpy.typing as npt
 import math
 
 def train_test_indices(num_samples: int, sample_set_sizes: List[int]) -> List[ np.ndarray]:
@@ -57,9 +56,6 @@ def softmax(vec):
 
 def predict_label(activations):
     return np.argmax(activations.squeeze())
-
-def unwrap_lines(text):
-    return ' '.join(map(str.strip, text.splitlines()))
 
 class BatchSampler:
     def __init__(self, data: np.ndarray, labels: Optional[Sequence] = None, batch_size=1):

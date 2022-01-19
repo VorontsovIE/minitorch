@@ -1,73 +1,95 @@
-import numpy as np
 import random
-from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy
-from layers import Sequential, Linear, Bias, ReLu, LeakyReLu, CrossEntropyLoss
-from mnist_loader import read_labels, read_images
+import os
+import argparse
 import logging
+import numpy as np
+from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy
+from layers import CrossEntropyLoss
+from mnist_loader import read_labels, read_images
+from mnist_clf import ImageClassificationModel
 
 FORMAT = '%(levelname)s: %(asctime)s — %(message)s'
 logging.basicConfig(format=FORMAT, level='DEBUG')
 logger = logging.getLogger('minitorch')
 
-def main():
-    seed = 137
-    random.seed(seed)
-    np.random.seed(seed)
+class Main:
+    input_size = 28 * 28 # size of image
+    skip_train = False
 
-    train_labels_fn = 'mnist_data/train-labels-idx1-ubyte'
-    train_images_fn = 'mnist_data/train-images-idx3-ubyte'
-    test_labels_fn  = 'mnist_data/t10k-labels-idx1-ubyte'
-    test_images_fn  = 'mnist_data/t10k-images-idx3-ubyte'
+    def run(self):
+        self.configure()        
 
-    input_size = 28*28 # size of image
-    num_classes = 10
-    train_val_labels = read_labels(train_labels_fn)
-    test_labels  = read_labels(test_labels_fn)
-    # realign images pixels into a single vector
-    train_val_data = read_images(train_images_fn).reshape(-1, input_size)
-    test_data  = read_images(test_images_fn).reshape(-1, input_size)
+        if self.args.seed:
+            random.seed(self.args.seed)
+            np.random.seed(self.args.seed)
 
-    (train_data, train_labels), (validation_data, validation_labels) = train_test_split(
-        data=train_val_data,
-        labels=train_val_labels,
-        sample_set_rates=(0.9, 0.1)
-    )
-    # One should use metrics on validation for hyperparameter tuning (I didn't)
-    logger.info('Data loaded')
+        self.load_or_init_model()
+        self.load_data()
+        if not self.skip_train:
+            self.train()
 
-    hidden_size_1 = 300
-    l2_coef = 0.01 / (input_size + hidden_size_1 + num_classes)
-    lin_1  = Linear(np.random.normal(size=(hidden_size_1, input_size)), l2_coef = l2_coef)
-    bias_1 = Bias(np.random.normal(size=(hidden_size_1, 1)), l2_coef = l2_coef)
-    lin_2  = Linear(np.random.normal(size=(num_classes, hidden_size_1)), l2_coef = l2_coef)
-    bias_2 = Bias(np.random.normal(size=(num_classes, 1)), l2_coef = l2_coef)
-    nn = Sequential([lin_1, bias_1, LeakyReLu(0.1), lin_2, bias_2, LeakyReLu(0.1)])
-    ce = CrossEntropyLoss()
-    batch_size = 16
-    learning_rate = 0.00001
-    # num_epochs = 25
-    num_epochs = 2
+        test_accuracy = accuracy(self.model, self.test_data, self.test_labels)
+        logger.info(f'Test accuracy: {test_accuracy}')
 
-    logger.info(f'(before training) Train accuracy: {accuracy(nn, train_data, train_labels)}')
-    logger.info(f'(before training) Validation accuracy: {accuracy(nn, validation_data, validation_labels)}')
-    logger.info(f'(before training) Test accuracy: {accuracy(nn, test_data, test_labels)}')
+    def configure(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--num-epochs', metavar='EPOCHS', dest='num_epochs',
+                            type=int, default=2, help='Number of epochs to train model.')
+        parser.add_argument('--model-filename', metavar='FILENAME', dest='model_fn',
+                            default='model.npz', help='File to load/store the model.')
+        parser.add_argument('--seed', type=int, help='Random seed')
+        parser.add_argument('--batch-size', dest='batch_size', type=int, default=16, help='Batch size')
+        parser.add_argument('--learning-rate', dest='learning_rate', type=float, default=0.00001, help='Learning rate')
+        self.args = parser.parse_args()
 
-    batch_sampler = BatchSampler(train_data, train_labels, batch_size=batch_size)
+    def load_data(self):
+        train_labels_fn = 'mnist_data/train-labels-idx1-ubyte'
+        train_images_fn = 'mnist_data/train-images-idx3-ubyte'
+        test_labels_fn  = 'mnist_data/t10k-labels-idx1-ubyte'
+        test_images_fn  = 'mnist_data/t10k-images-idx3-ubyte'
 
-    # num_samples = train_data.shape[1]
+        self.train_val_labels = read_labels(train_labels_fn)
+        self.test_labels  = read_labels(test_labels_fn)
+        # realign images pixels into a single vector
+        self.train_val_data = read_images(train_images_fn).reshape(-1, self.input_size)
+        self.test_data  = read_images(test_images_fn).reshape(-1, self.input_size)
+        logger.info('Data loaded')
 
-    for epoch in range(num_epochs):
-        logger.info(f'Epoch started: {epoch}')
+    def train_val_split(self):
+        # I didn't tune model, but...
+        # One should use metrics on validation for hyperparameter tuning, not on test dataset
+        (self.train_data, self.train_labels), (self.val_data, self.val_labels) = train_test_split(
+            data=self.train_val_data,
+            labels=self.train_val_labels,
+            sample_set_rates=(0.9, 0.1)
+        )
+    
+    def load_or_init_model(self):
+        model_fn = self.args.model_fn
+        if os.path.exists(model_fn):
+            self.model = ImageClassificationModel.load(model_fn)
+            logger.info(f"Model loaded from {model_fn}.")
+            logger.warning("Model won't be trained! We can't guarantee that train/val " +
+                           "split at pretraining and training stages was the same. " +
+                           "Thus the model will be overfitted and we won't even notice it.")
+            self.skip_train = True
+        else:
+            self.model = ImageClassificationModel.initialize_random(input_size=self.input_size, hidden_size=300)
+            logger.info(f"Initialized model with random data.")
+
+    def train_single_epoch(self):
+        model = self.model
+        ce = CrossEntropyLoss()
         total_loss = 0
         num_samples = 0
         total_loss_wo_regularization = 0
-        for (batch_samples, batch_labels) in batch_sampler:
+        for (batch_samples, batch_labels) in self.batch_sampler:
             cur_batch_size = 0
-            nn.zero_grad()
+            model.zero_grad()
             for (sample, label) in zip(batch_samples, batch_labels):
-                # NN forwarding of entire batches not yet implemented, so we just loop batches
+                # forwarding of entire batches not yet implemented, so we just loop batches
                 sample = np.expand_dims(sample, 1)
-                activations = nn.forward(sample)
+                activations = model.forward(sample)
                 loss = ce.forward(activations, label)
                 probs = softmax(activations)
                 if np.isnan(loss) or np.isinf(loss) or np.any(np.isnan(probs) | np.isinf(probs)):
@@ -75,21 +97,43 @@ def main():
                 cur_batch_size += 1
                 total_loss += loss
                 total_loss_wo_regularization += loss
-                grad_by_input = nn.backward(ce.backward())
-            nn.backward_regularization(rate=cur_batch_size)
-            total_loss += cur_batch_size * nn.regularization_loss()
+                grad_by_input = model.backward(ce.backward())
+            model.backward_regularization(rate=cur_batch_size)
+            total_loss += cur_batch_size * model.regularization_loss()
             num_samples += cur_batch_size
-            nn.step_grad(learning_rate)
-        logger.info(f'Epoch finished: {epoch}')
+            model.step_grad(self.args.learning_rate)
         logger.info(
           f"Total loss: {total_loss / num_samples}; " +
           f"Total loss w/o regularization: {total_loss_wo_regularization / num_samples}; " +
-          f"Regularization loss: {num_samples * nn.regularization_loss()}"
+          f"Regularization loss: {num_samples * model.regularization_loss()}"
         )
-        logger.info(f'Train accuracy: {accuracy(nn, train_data, train_labels)}')
-        logger.info(f'Validation accuracy: {accuracy(nn, validation_data, validation_labels)}')
 
-    logger.info(f'Test accuracy: {accuracy(nn, test_data, test_labels)}')
+    def train(self):
+        model = self.model
+        self.train_val_split()
+        self.batch_sampler = BatchSampler(self.train_data, self.train_labels, batch_size=self.args.batch_size)
+
+        train_accuracy = accuracy(model, self.train_data, self.train_labels)
+        val_accuracy = accuracy(model, self.val_data, self.val_labels)
+        test_accuracy = accuracy(model, self.test_data, self.test_labels)
+        logger.info(f'(before training) Train accuracy: {train_accuracy}')
+        logger.info(f'(before training) Validation accuracy: {val_accuracy}')
+        logger.info(f'(before training) Test accuracy: {test_accuracy}')
+
+        best_val_accuracy = 0
+
+        for epoch in range(self.args.num_epochs):
+            logger.info(f'Epoch started: {epoch}')
+            self.train_single_epoch()
+            logger.info(f'Epoch finished: {epoch}')
+            train_accuracy = accuracy(model, self.train_data, self.train_labels)
+            val_accuracy = accuracy(model, self.val_data, self.val_labels)
+            logger.info(f'Train accuracy: {train_accuracy}')
+            logger.info(f'Validation accuracy: {val_accuracy}')
+            if val_accuracy > best_val_accuracy:
+                best_val_accuracy = val_accuracy
+                model.store(self.args.model_fn)
+                logger.info(f"Store model to {self.args.model_fn}.")
 
 if __name__ == '__main__':
-    main()
+    Main().run()
