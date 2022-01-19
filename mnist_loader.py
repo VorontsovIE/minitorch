@@ -9,7 +9,7 @@ def read_labels(labels_fn):
     assert magic == 2049
     offset = struct.calcsize(header_format)
     labels = struct.unpack_from(f'>{num_labels}B', data, offset=offset)
-    return labels
+    return np.array(labels)
 
 def read_images(images_fn):
     with open(images_fn, 'rb') as f:
