@@ -106,3 +106,8 @@ def gradients(model: Model, loss: Callable[[Model], float], step: float = 0.0000
             gradient[idx] = (loss(model_2) - loss(model_1)) / (2 * step)
         gradients[key] = gradient
     return gradients
+
+def print_image(sample, threshold=10, shape=(28,28), marker_filled='x', marker_empty=' '):
+    sample = sample.reshape(*shape)
+    for row in range(sample.shape[0]):
+        print(''.join( (marker_filled if pix >= threshold else marker_empty)  for pix in sample[row,:]))
