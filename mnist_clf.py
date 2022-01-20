@@ -1,5 +1,5 @@
 import numpy as np
-from layers import Sequential, Linear, Bias, ReLu, LeakyReLu, CrossEntropyLoss, Model
+from layers import Sequential, Linear, Bias, ReLu, LeakyReLu, CrossEntropyLoss, Model, Layer, VariableLayer
 from typing import Dict
 
 class ImageClassificationModel(Model):
@@ -19,11 +19,16 @@ class ImageClassificationModel(Model):
         return self._model
 
     def parameters(self) -> Dict[str, np.ndarray]:
+        # Here filtering is unnecessary, as we use variable layers.
+        # But it helps to explain mypy that a layer actually has weights
+        return {param_name: layer.weights for param_name, layer in self.variable_layers().items()}
+
+    def variable_layers(self) -> Dict[str, VariableLayer]:
         return {
-          'linear_1': self._linear_1.weights,
-          'linear_2': self._linear_2.weights,
-          'bias_1': self._bias_1.weights,
-          'bias_2': self._bias_2.weights,
+          'linear_1': self._linear_1,
+          'linear_2': self._linear_2,
+          'bias_1': self._bias_1,
+          'bias_2': self._bias_2,
         }
 
     @classmethod
@@ -37,6 +42,18 @@ class ImageClassificationModel(Model):
             Linear(parameters['linear_2'], l2_coef=l2_coef),
             Bias(parameters['bias_2'], l2_coef=l2_coef),
         )
+
+    def update_parameters(self, parameters: Dict[str, np.ndarray]):
+        "Update a model using a mapping of parameters (it's performance optimization for gradient checking)"
+        layer_mapping = {
+            'linear_1': self._linear_1,
+            'linear_2': self._linear_2,
+            'bias_1': self._bias_1,
+            'bias_2': self._bias_2,
+        }
+        for param_name, layer in layer_mapping.items():
+            if param_name in parameters:
+                layer.weights = parameters[param_name]
 
     @classmethod
     def initialize_random(cls, input_size: int = 28*28, hidden_size: int = 300) -> 'ImageClassificationModel':

@@ -3,7 +3,8 @@ import os
 import argparse
 import logging
 import numpy as np
-from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy
+from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy, image_to_str
+from gradient_checking import check_gradients
 from layers import CrossEntropyLoss
 from mnist_loader import read_labels, read_images
 from mnist_clf import ImageClassificationModel
@@ -23,13 +24,27 @@ class Main:
             random.seed(self.args.seed)
             np.random.seed(self.args.seed)
 
-        self.load_or_init_model()
-        self.load_data()
-        if not self.skip_train:
-            self.train()
-
-        test_accuracy = accuracy(self.model, self.test_data, self.test_labels)
-        logger.info(f'Test accuracy: {test_accuracy}')
+        if self.args.operating_mode == 'train-test':
+            self.load_or_init_model()
+            self.load_data()
+            self.train_val_split()
+            if not self.skip_train:
+                self.train()
+            test_accuracy = accuracy(self.model, self.test_data, self.test_labels)
+            logger.info(f'Test accuracy: {test_accuracy}')
+        else:
+            self.load_or_init_model()
+            self.load_data()
+            logger.info('Gradient checking started...')
+            idx = np.random.randint(self.train_val_data.shape[0])
+            sample = np.expand_dims(self.train_val_data[idx], 1)
+            label = self.train_val_labels[idx]
+            print(f'Label: {label}')
+            print(image_to_str(sample))
+            if not check_gradients(self.model, sample, label, tolerance = 1e-4):
+                logger.error(f"Gradient checking failed on train sample {idx}.")
+            else:
+                logger.info(f"Gradient checking passed on train sample {idx}.")
 
     def configure(self):
         parser = argparse.ArgumentParser()
@@ -40,6 +55,9 @@ class Main:
         parser.add_argument('--seed', type=int, help='Random seed')
         parser.add_argument('--batch-size', dest='batch_size', type=int, default=16, help='Batch size')
         parser.add_argument('--learning-rate', dest='learning_rate', type=float, default=0.00001, help='Learning rate')
+        parser.add_argument('--operating-mode', dest='operating_mode',
+                            choices=['train-test', 'gradient-checking'],
+                            default='train-test', help='Specify operation to perform (train-test / gradient-checking).')
         self.args = parser.parse_args()
 
     def load_data(self):
@@ -110,7 +128,6 @@ class Main:
 
     def train(self):
         model = self.model
-        self.train_val_split()
         self.batch_sampler = BatchSampler(self.train_data, self.train_labels, batch_size=self.args.batch_size)
 
         train_accuracy = accuracy(model, self.train_data, self.train_labels)

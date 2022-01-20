@@ -1,12 +1,13 @@
 import functools
 import math
 import numpy as np
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 import logging
 
 logger = logging.getLogger('minitorch')
 
 class Layer:
+    weights: Optional[np.ndarray]
     '''
     Layer is any building block which passes vectors and gradients.
     It needn't be a single layer (see `Sequential`).
@@ -55,15 +56,26 @@ class Layer:
         "Update weights in the anti-gradient direction."
         pass
 
+class VariableLayer(Layer):
+    "Dummy class to explain mypy that the layer actually has weights and gradients."
+    weights: np.ndarray
+    grad: np.ndarray
 
 class Model(Layer):
     '''
     Add load/store functionality to a Layer.
-    It's necessary to implement `model`, `parameters` and `cls.from_parameters` methods.
+    It's necessary to implement `model`, `parameters`,
+      `update_parameters`, `layers` and `cls.from_parameters` methods.
     '''
     @property
     def model(self):
         "Initialize model in constructor and return it in this method."
+        raise NotImplementedError()
+
+    def variable_layers(self) -> Dict[str, VariableLayer]:
+        '''
+        Return a mapping {parameter_name: layer} for variable layers.
+        '''
         raise NotImplementedError()
 
     def parameters(self) -> Dict[str, np.ndarray]:
@@ -71,12 +83,15 @@ class Model(Layer):
         Return a mapping {parameter_name: parameter_value} 
           where parameter_value usually represent layer weights.
         '''
-
         raise NotImplementedError()
 
     @classmethod
     def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> 'Model':
         "Create a model from a mapping of parameters"
+        raise NotImplementedError()
+
+    def update_parameters(cls, parameters: Dict[str, np.ndarray]):
+        "Update a model using a mapping of parameters (it's performance optimization for gradient checking)"
         raise NotImplementedError()
 
     @classmethod
@@ -106,7 +121,8 @@ class Model(Layer):
         return self.model.step_grad(rate)
 
 
-class Linear(Layer):
+class Linear(VariableLayer):
+    l2_coef: float
     def __init__(self, weights: np.ndarray, l2_coef: float = 1.0):
         self.weights = weights
         self.grad = np.zeros_like(self.weights)
@@ -136,7 +152,8 @@ class Linear(Layer):
             return
         self.weights -= rate * self.grad
 
-class Bias(Layer):
+class Bias(VariableLayer):
+    l2_coef: float
     def __init__(self, weights: np.ndarray, l2_coef: float = 1.0):
         self.weights = weights
         self.grad = np.zeros_like(self.weights)
