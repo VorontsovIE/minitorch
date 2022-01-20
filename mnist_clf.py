@@ -45,13 +45,7 @@ class ImageClassificationModel(Model):
 
     def update_parameters(self, parameters: Dict[str, np.ndarray]):
         "Update a model using a mapping of parameters (it's performance optimization for gradient checking)"
-        layer_mapping = {
-            'linear_1': self._linear_1,
-            'linear_2': self._linear_2,
-            'bias_1': self._bias_1,
-            'bias_2': self._bias_2,
-        }
-        for param_name, layer in layer_mapping.items():
+        for param_name, layer in self.variable_layers().items():
             if param_name in parameters:
                 layer.weights = parameters[param_name]
 
