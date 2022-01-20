@@ -1,6 +1,7 @@
-from typing import Tuple, List, Any, Optional, Sequence
+from typing import Tuple, List, Any, Optional, Sequence, Dict, Callable
 import numpy as np
 import math
+from layers import Model
 
 def train_test_indices(num_samples: int, sample_set_sizes: List[int]) -> List[ np.ndarray]:
     if not all((x >= 0 and isinstance(x, int)) for x in sample_set_sizes):
@@ -79,3 +80,29 @@ class BatchSampler:
             else:
                 yield self.data[indices_chunk]
             cur = next_cur
+
+def gradients(model: Model, loss: Callable[[Model], float], step: float = 0.00001) -> Dict[str, np.ndarray]:
+    cls = type(model)
+    parameters = model.parameters()
+    gradients = {}
+    for key, weights in parameters.items():
+        idx_iter = np.nditer(weights, flags=['multi_index'])
+        gradient = np.zeros_like(weights)
+        for _ in idx_iter:
+            idx = idx_iter.multi_index
+
+            parameters_1 = parameters.copy()
+            weights_1 = weights.copy()
+            weights_1[idx] = weights[idx] - step
+            parameters_1[key] = weights_1
+            model_1 = cls.from_parameters(parameters_1)
+
+            parameters_2 = parameters.copy()
+            weights_2 = weights.copy()
+            weights_2[idx] = weights[idx] - step
+            parameters_2[key] = weights_2
+            model_2 = cls.from_parameters(parameters_2)
+
+            gradient[idx] = (loss(model_2) - loss(model_1)) / (2 * step)
+        gradients[key] = gradient
+    return gradients
