@@ -59,16 +59,24 @@ class Layer:
 class Model(Layer):
     '''
     Add load/store functionality to a Layer.
+    It's necessary to implement `model`, `parameters` and `cls.from_parameters` methods.
     '''
     @property
     def model(self):
+        "Initialize model in constructor and return it in this method."
         raise NotImplementedError()
 
     def parameters(self) -> Dict[str, np.ndarray]:
+        '''
+        Return a mapping {parameter_name: parameter_value} 
+          where parameter_value usually represent layer weights.
+        '''
+
         raise NotImplementedError()
 
     @classmethod
     def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> 'Model':
+        "Create a model from a mapping of parameters"
         raise NotImplementedError()
 
     @classmethod
@@ -96,7 +104,6 @@ class Model(Layer):
 
     def step_grad(self, rate: float):
         return self.model.step_grad(rate)
-
 
 
 class Linear(Layer):
