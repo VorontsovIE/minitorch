@@ -120,11 +120,9 @@ class Main:
             total_loss += cur_batch_size * model.regularization_loss()
             num_samples += cur_batch_size
             model.step_grad(self.args.learning_rate)
-        logger.info(
-          f"Total loss: {total_loss / num_samples}; " +
-          f"Total loss w/o regularization: {total_loss_wo_regularization / num_samples}; " +
-          f"Regularization loss: {num_samples * model.regularization_loss()}"
-        )
+        logger.info(f"Total loss: {total_loss / num_samples}")
+        logger.debug(f"Total loss w/o regularization: {total_loss_wo_regularization / num_samples}")
+        logger.debug(f"Regularization loss: {num_samples * model.regularization_loss()}")
 
     def train(self):
         model = self.model
