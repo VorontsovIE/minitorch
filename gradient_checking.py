@@ -43,6 +43,8 @@ def backprop_gradients(model: Model, sample: np.ndarray, label: int):
     return {param_name: layer.grad  for param_name, layer in model.variable_layers().items()}
 
 def check_gradients(model: Model, sample: np.ndarray, label: int, tolerance: float = 1e-4) -> bool:
+    # Note: here we can use loss as a parameter, or even use lambda model, sample, label: loss(model, sample, label)
+    #   but it complicates code. Moreover, when loss computation is done via AST, an interface will be changed inevitably.
     loss = CrossEntropyLoss()
     num_gradients = numeric_gradients(model, sample, label)
     bp_gradients = backprop_gradients(model, sample, label)
