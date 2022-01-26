@@ -1,3 +1,4 @@
+from __future__ import annotations
 import functools
 import math
 import numpy as np
@@ -86,7 +87,7 @@ class Model(Layer):
         raise NotImplementedError()
 
     @classmethod
-    def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> 'Model':
+    def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> Model:
         "Create a model from a mapping of parameters"
         raise NotImplementedError()
 
@@ -95,7 +96,7 @@ class Model(Layer):
         raise NotImplementedError()
 
     @classmethod
-    def load(cls, filename: str) -> 'Model':
+    def load(cls, filename: str) -> Model:
         with np.load(filename) as data:
             return cls.from_parameters(data)
 

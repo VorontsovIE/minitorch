@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 from layers import Sequential, Linear, Bias, ReLu, LeakyReLu, CrossEntropyLoss, Model, Layer, VariableLayer
 from typing import Dict
@@ -32,7 +33,7 @@ class ImageClassificationModel(Model):
         }
 
     @classmethod
-    def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> 'ImageClassificationModel':
+    def from_parameters(cls, parameters: Dict[str, np.ndarray]) -> ImageClassificationModel:
         input_size = parameters['linear_1'].shape[1]
         hidden_size = parameters['linear_1'].shape[0]
         l2_coef = 0.01 / (input_size + hidden_size + cls.num_classes)
@@ -50,7 +51,7 @@ class ImageClassificationModel(Model):
                 layer.weights = parameters[param_name]
 
     @classmethod
-    def initialize_random(cls, input_size: int = 28*28, hidden_size: int = 300) -> 'ImageClassificationModel':
+    def initialize_random(cls, input_size: int = 28*28, hidden_size: int = 300) -> ImageClassificationModel:
         l2_coef = 0.01 / (input_size + hidden_size + cls.num_classes)
         linear_1  = Linear(np.random.normal(size=(hidden_size, input_size)), l2_coef=l2_coef)
         bias_1 = Bias(np.random.normal(size=(hidden_size, 1)), l2_coef=l2_coef)
