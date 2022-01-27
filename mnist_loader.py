@@ -19,4 +19,5 @@ def read_images(images_fn):
     assert magic == 2051
     offset = struct.calcsize(header_format)
     pixels = struct.unpack_from(f'>{num_images * num_rows * num_columns}B', data, offset=offset)
-    return np.array(pixels).reshape((num_images, num_rows, num_columns))
+    img_matrices = np.array(pixels).reshape((num_images, num_rows, num_columns))
+    return np.moveaxis(img_matrices, 0, -1)  # shape (num_rows, num_columns, num_images)

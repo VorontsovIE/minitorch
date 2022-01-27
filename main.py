@@ -36,7 +36,7 @@ class Main:
             self.load_or_init_model()
             self.load_data()
             logger.info('Gradient checking started...')
-            idx = np.random.randint(self.train_val_data.shape[0])
+            idx = np.random.randint(self.train_val_data.shape[-1])
             sample = np.expand_dims(self.train_val_data[idx], 1)
             label = self.train_val_labels[idx]
             print(f'Label: {label}')
@@ -69,8 +69,8 @@ class Main:
         self.train_val_labels = read_labels(train_labels_fn)
         self.test_labels  = read_labels(test_labels_fn)
         # realign images pixels into a single vector
-        self.train_val_data = read_images(train_images_fn).reshape(-1, self.input_size)
-        self.test_data  = read_images(test_images_fn).reshape(-1, self.input_size)
+        self.train_val_data = read_images(train_images_fn).reshape(self.input_size, -1)
+        self.test_data  = read_images(test_images_fn).reshape(self.input_size, -1)
         logger.info('Data loaded')
 
     def train_val_split(self):
@@ -103,10 +103,13 @@ class Main:
         num_samples = 0
         total_loss_wo_regularization = 0
         for (batch_samples, batch_labels) in self.batch_sampler:
+            # print(batch_samples.shape, batch_labels.shape, batch_samples.sum(), batch_labels)
+            # raise Exception("Stop")
             model.zero_grad()
             activations = model.forward(batch_samples)
             losses = ce.forward(activations, batch_labels)
             loss = summer.forward(losses)
+            # print(batch_samples.shape, activations.shape, losses.shape, loss)
             total_loss += loss
             total_loss_wo_regularization += loss
             grad_by_input = model.backward(ce.backward(summer.backward(1.0)))

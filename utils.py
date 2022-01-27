@@ -22,9 +22,9 @@ def train_test_split(data: np.ndarray,
                     labels: Optional[np.ndarray]=None,
                     sample_set_sizes: Optional[List[int]] = None,
                     sample_set_rates: Optional[List[float]] = None):
-    if (labels is not None) and (len(labels) != data.shape[0]):
+    if (labels is not None) and (len(labels) != data.shape[-1]):
         raise ValueError("Data and labels are of inconsistent sizes")
-    num_samples = data.shape[0]
+    num_samples = data.shape[-1]
     if sample_set_rates:
         if sample_set_sizes:
             raise ValueError("Specify either rates or numbers of sample sets, not both")
@@ -35,18 +35,14 @@ def train_test_split(data: np.ndarray,
             raise ValueError("Specify either rates or numbers of sample sets")
     index_sets = train_test_indices(num_samples, sample_set_sizes)
     if labels is not None:
-        return [(data[index_set], labels[index_set])  for index_set in index_sets]
+        return [(data[..., index_set], labels[index_set])  for index_set in index_sets]
     else:
-        return [data[index_set]  for index_set in index_sets]
+        return [data[..., index_set]  for index_set in index_sets]
 
 def accuracy(model, data: np.ndarray, labels: Sequence) -> float:
-    num_samples = data.shape[0]
-    correct = 0
-    for idx in range(num_samples):
-        sample = np.expand_dims(data[idx], 1)
-        activations = model.forward(sample)
-        if predict_label(activations) == labels[idx]:
-            correct += 1
+    num_samples = data.shape[-1]
+    activations = model.forward(data)
+    correct = np.sum(predict_label(activations) == labels)
     return correct / num_samples
 
 def softmax(vec: np.ndarray) -> np.ndarray:
@@ -56,19 +52,19 @@ def softmax(vec: np.ndarray) -> np.ndarray:
     return shifted_exp / exp_sum
 
 
-def predict_label(activations: np.ndarray) -> int:
-    return np.argmax(activations.squeeze()).astype(int)
+def predict_label(activations: np.ndarray) -> np.ndarray:
+    return np.argmax(activations, axis=0)
 
 class BatchSampler:
     def __init__(self, data: np.ndarray, labels: Optional[Sequence] = None, batch_size: int = 1):
-        if (labels is not None) and (len(labels) != data.shape[0]):
+        if (labels is not None) and (len(labels) != data.shape[-1]):
             raise ValueError("Data and labels are of inconsistent sizes")
         self.data = data
         self.labels = labels
         self.batch_size = batch_size
 
     def __len__(self):
-        return self.data.shape[0]
+        return self.data.shape[-1]
 
     def __iter__(self):
         indices = np.argsort(np.random.uniform(size=len(self)))
@@ -77,9 +73,9 @@ class BatchSampler:
             next_cur = cur + self.batch_size
             indices_chunk = indices[cur:next_cur]
             if self.labels is not None:
-                yield (np.moveaxis(self.data[indices_chunk], 0, -1), self.labels[indices_chunk])
+                yield (self.data[..., indices_chunk], self.labels[indices_chunk])
             else:
-                yield np.moveaxis(self.data[indices_chunk], 0, -1)
+                yield self.data[..., indices_chunk]
             cur = next_cur
 
 def image_to_str(sample, threshold=10, shape=(28,28), marker_filled='x', marker_empty=' '):
