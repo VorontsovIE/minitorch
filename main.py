@@ -36,15 +36,17 @@ class Main:
             self.load_or_init_model()
             self.load_data()
             logger.info('Gradient checking started...')
-            idx = np.random.randint(self.train_val_data.shape[-1])
-            sample = np.expand_dims(self.train_val_data[idx], 1)
-            label = self.train_val_labels[idx]
-            print(f'Label: {label}')
-            print(image_to_str(sample))
-            if not check_gradients(self.model, sample, label, tolerance = 1e-4):
-                logger.error(f"Gradient checking failed on train sample {idx}.")
+            batch_size = 4
+            indices = np.random.randint(self.train_val_data.shape[-1], size=batch_size)
+            batch = self.train_val_data[..., indices]
+            labels = self.train_val_labels[indices]
+            for idx in range(batch_size):
+                print(f'Label: {labels[idx]}')
+                print(image_to_str(batch[..., idx]))
+            if not check_gradients(self.model, batch, labels, tolerance = 1e-4):
+                logger.error(f"Gradient checking failed on train sample batch {indices}.")
             else:
-                logger.info(f"Gradient checking passed on train sample {idx}.")
+                logger.info(f"Gradient checking passed on train sample {indices}.")
 
     def configure(self):
         parser = argparse.ArgumentParser()
