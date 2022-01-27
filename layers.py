@@ -1,6 +1,5 @@
 from __future__ import annotations
 import functools
-import math
 import numpy as np
 from typing import Tuple, List, Dict, Optional
 import logging
@@ -125,15 +124,26 @@ class Model(Layer):
 class Linear(VariableLayer):
     l2_coef: float
     def __init__(self, weights: np.ndarray, l2_coef: float = 1.0):
+        if weights.ndim != 2:
+            raise ValueError(f'weights should be 2-dim (output_activations, input_activations) but was {weights.shape}')
         self.weights = weights
         self.grad = np.zeros_like(self.weights)
         self.l2_coef = l2_coef
 
     def forward(self, vec: np.ndarray) -> np.ndarray:
+        input_activations_sz = self.weights.shape[1]
+        if not ((vec.ndim == 2) and (vec.shape[0] == input_activations_sz)):
+            raise ValueError(f'vec should be 2-dim ({input_activations_sz}, batch_size) but was {vec.shape}')
         self.input = vec
         return self.weights @ vec
 
     def backward(self, vec: np.ndarray) -> np.ndarray:
+        output_activations_sz = self.weights.shape[0]
+        batch_size = self.input.shape[1]
+        if vec.shape != (output_activations_sz, batch_size):
+            raise ValueError(f'vec should be 2-dim ({output_activations_sz}, {batch_size}) but was {vec.shape}')
+        # vec: (output_dim, batch_size)
+        # input.T: (batch_size, input_dim)
         self.grad += vec @ np.transpose(self.input) # gradient by weights
         return np.transpose(self.weights) @ vec     # gradient by input
 
@@ -156,16 +166,22 @@ class Linear(VariableLayer):
 class Bias(VariableLayer):
     l2_coef: float
     def __init__(self, weights: np.ndarray, l2_coef: float = 1.0):
+        if not ((weights.ndim == 2) and (weights.shape[1] == 1)):
+            raise ValueError(f'weights should be 2-dim (activations, 1) but was {weights.shape}')
         self.weights = weights
         self.grad = np.zeros_like(self.weights)
         self.l2_coef = l2_coef
 
     def forward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
         self.input = vec
         return self.weights + vec
 
     def backward(self, vec: np.ndarray) -> np.ndarray:
-        self.grad += vec
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
+        self.grad += np.expand_dims(np.sum(vec, axis=1), 1)
         return vec
 
     def backward_regularization(self, rate: float = 1):
@@ -186,10 +202,14 @@ class Bias(VariableLayer):
 
 class ReLu(Layer):
     def forward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
         self.input = vec
         return (vec > 0) * vec
 
     def backward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
         return (self.input > 0) * vec
 
 class LeakyReLu(Layer):
@@ -197,10 +217,14 @@ class LeakyReLu(Layer):
         self.alpha = alpha
 
     def forward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
         self.input = vec
         return np.where(vec > 0, vec, vec * self.alpha)
 
     def backward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f'vec should be 2-dim (activations, batch_size) but was {vec.shape}')
         return np.where(self.input > 0, 1, self.alpha) * vec
 
 class Sequential(Layer):
@@ -231,16 +255,21 @@ class Sequential(Layer):
 
 class SoftMax(Layer):
     def forward(self, vec: np.ndarray) -> np.ndarray:
+        if vec.ndim != 2:
+            raise ValueError(f"vec should be 2-dim (activations, batch_size) but was {vec.shape}.")
         self.input = vec
         exps = np.exp(vec)
         return exps / np.sum(exps)
 
     def backward(self, vec: np.ndarray) -> np.ndarray:
+        activations_sz = self.input.shape[0]
+        batch_size = self.input.shape[1]
+        if vec.shape != (activations_sz, batch_size):
+            raise ValueError(f"vec should be 2-dim ({activations_sz}, {batch_size}) but was {vec.shape}.")
         exps = np.exp(self.input).squeeze()
         normed_exps = exps / np.sum(exps)
         jacobian = np.diag(normed_exps) - normed_exps @ np.transpose(normed_exps)
         return jacobian @ vec
-
 
 class CrossEntropyLoss:
     '''
@@ -248,7 +277,7 @@ class CrossEntropyLoss:
     NOTE! Input vector is raw values, not probabilites vector.
           Softmax of input is calculated inside of CE-loss.
     '''
-    def forward(self, vec: np.ndarray, label: int) -> float:
+    def forward(self, vec: np.ndarray, labels: np.ndarray) -> np.ndarray:
         # H = -p*log(q) where p is actual class distribution, q is predicted distribution
         #   = -1*log(q_l) = -log(SoftMax_l(v_1..v_n))  where l is label
         #   = -log(\exp{v_l} / (\sum_k \exp{v_k}) )
@@ -256,19 +285,38 @@ class CrossEntropyLoss:
         #   = log(\exp{m}\sum_k \exp{v_k - m}) - v_l   for any m
         #   = log(\sum_k \exp{v_k - m}) + m - v_l      we put m = max(v_k)
         #   = log(\sum_k \exp{w_k}) - w_l              where w_i = v_i - m
-        self.label = label
-        shifted_vec = vec - np.max(vec)
+        if (labels.ndim != 1):
+            raise ValueError('Labels should be 1-dim.')
+        batch_size = len(labels)
+        if not((vec.ndim == 2) and (vec.shape[1] == batch_size)):
+            raise ValueError(f'Inconsistent shapes of matrix {vec.shape} and labels {labels.shape}.')
+        self.labels = labels
+        shifted_vec = vec - np.max(vec, axis=0)
         shifted_exp = np.exp(shifted_vec)
-        exp_sum = np.sum(shifted_exp)
+        exp_sum = np.sum(shifted_exp, axis=0)
         self.shifted_vec = shifted_vec
         self.shifted_exp = shifted_exp
         self.exp_sum = exp_sum
-        return math.log(exp_sum) - shifted_vec[label]
+        result = np.log(exp_sum) - shifted_vec[labels, np.arange(batch_size)]
+        return result.reshape(1, batch_size)
 
-    def backward(self) -> np.ndarray:
+    def backward(self, vec: np.ndarray) -> np.ndarray:
         # dH/dx_i = \exp{v_i} / (\sum_k\exp{v_k}) - \delta_{i,l} =
         #         = \exp{v_i - m} / (\sum_k\exp{v_k - m}) - \delta_{i,l}
         #         = \exp{w_i} / (\sum_k\exp{w_k}) - \delta_{i,l}
+        batch_size = len(self.labels)
+        if vec.shape != (1, batch_size):
+            raise ValueError(f'Gradient should be of shape (1, batch_size={batch_size}) but was {vec.shape}')
         result = self.shifted_exp / self.exp_sum
-        result[self.label] -= 1
-        return result
+        result[self.labels, np.arange(batch_size)] -= 1
+        return result * vec  # shape (num_classes, batch_size)
+
+class SumOverBatch:
+    def forward(self, values: np.ndarray) -> float:
+        if not ((values.ndim == 2) and (values.shape[0] == 1)):
+            raise ValueError(f'Values should be of shape (1, batch_size) but was {values.shape}.')
+        self.batch_size = values.shape[1]
+        return float(np.sum(values))
+
+    def backward(self, value: float) -> np.ndarray:
+        return np.ones(shape=(1, self.batch_size)) * value

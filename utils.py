@@ -77,9 +77,9 @@ class BatchSampler:
             next_cur = cur + self.batch_size
             indices_chunk = indices[cur:next_cur]
             if self.labels is not None:
-                yield (self.data[indices_chunk], self.labels[indices_chunk])
+                yield (np.moveaxis(self.data[indices_chunk], 0, -1), self.labels[indices_chunk])
             else:
-                yield self.data[indices_chunk]
+                yield np.moveaxis(self.data[indices_chunk], 0, -1)
             cur = next_cur
 
 def image_to_str(sample, threshold=10, shape=(28,28), marker_filled='x', marker_empty=' '):

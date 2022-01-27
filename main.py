@@ -5,7 +5,7 @@ import logging
 import numpy as np
 from utils import BatchSampler, train_test_split, softmax, predict_label, accuracy, image_to_str
 from gradient_checking import check_gradients
-from layers import CrossEntropyLoss
+from layers import CrossEntropyLoss, SumOverBatch
 from mnist_loader import read_labels, read_images
 from mnist_clf import ImageClassificationModel
 
@@ -18,7 +18,7 @@ class Main:
     skip_train = False
 
     def run(self):
-        self.configure()        
+        self.configure()
 
         if self.args.seed:
             random.seed(self.args.seed)
@@ -98,24 +98,19 @@ class Main:
     def train_single_epoch(self):
         model = self.model
         ce = CrossEntropyLoss()
+        summer = SumOverBatch()
         total_loss = 0
         num_samples = 0
         total_loss_wo_regularization = 0
         for (batch_samples, batch_labels) in self.batch_sampler:
-            cur_batch_size = 0
             model.zero_grad()
-            for (sample, label) in zip(batch_samples, batch_labels):
-                # forwarding of entire batches not yet implemented, so we just loop batches
-                sample = np.expand_dims(sample, 1)
-                activations = model.forward(sample)
-                loss = ce.forward(activations, label)
-                probs = softmax(activations)
-                if np.isnan(loss) or np.isinf(loss) or np.any(np.isnan(probs) | np.isinf(probs)):
-                    continue
-                cur_batch_size += 1
-                total_loss += loss
-                total_loss_wo_regularization += loss
-                grad_by_input = model.backward(ce.backward())
+            activations = model.forward(batch_samples)
+            losses = ce.forward(activations, batch_labels)
+            loss = summer.forward(losses)
+            total_loss += loss
+            total_loss_wo_regularization += loss
+            grad_by_input = model.backward(ce.backward(summer.backward(1.0)))
+            cur_batch_size = len(batch_labels)
             model.backward_regularization(rate=cur_batch_size)
             total_loss += cur_batch_size * model.regularization_loss()
             num_samples += cur_batch_size
