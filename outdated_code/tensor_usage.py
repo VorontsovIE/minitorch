@@ -25,7 +25,7 @@ test_labels = np.hstack([1 * np.ones(test_pos.shape[1], dtype=int), 0 * np.ones(
 def basic_loss(data, labels):
     return  tensor.SumOverBatch(
                 tensor.CrossEntropyLoss(
-                    lin_2 @ lin_1 @ tensor.Tensor(train_data, differentiable=False),
+                    lin_2 @ tensor.LeakyReLu(0.1, lin_1 @ tensor.Tensor(train_data, differentiable=False)),
                     train_labels
                 )
             )
@@ -36,10 +36,10 @@ def regularization_loss():
 lin_1 = tensor.Tensor(np.random.normal(size=(3,2)))
 lin_2 = tensor.Tensor(np.random.normal(size=(2,3)))
 for _ in range(200):
-    loss = basic_loss(train_data, train_labels) + 0.1 * regularization_loss()
-    print(loss.forward())
-    loss.backward(1.0)
-    loss.step_grad(0.000001)
+    train_loss = basic_loss(train_data, train_labels) + 0.1 * regularization_loss()
+    print(train_loss.forward())
+    train_loss.backward(1.0)
+    train_loss.step_grad(0.000001)
 
 loss_test = basic_loss(test_data, test_labels) + 0.1 * regularization_loss()
-print(loss_test.forward())
+print('Test', loss_test.forward())
