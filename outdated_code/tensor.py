@@ -369,7 +369,8 @@ class ReLu(UnaryOperation):
 
 
 class LeakyReLu(UnaryOperation):
-    def __init__(self, alpha):
+    def __init__(self, alpha, arg):
+        super().__init__(arg)
         self.alpha = alpha
 
     @property
@@ -395,3 +396,5 @@ class LeakyReLu(UnaryOperation):
 # Посмотреть, что там с размерностью Bias
 # Сложение с числом ?
 
+# Из-за кеширования каждый раз придётся пересоздавать loss при изменении весов.
+# С другой стороны, и так придётся т.к. батчи разные. А ради чекера градиентов менять ничего не хочется.
