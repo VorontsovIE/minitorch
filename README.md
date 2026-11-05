@@ -1,5 +1,7 @@
 # minitorch
 
+Сделано как тестовое задание в JetBrains Research.
+
 Запустить обучение (если сохранённая модель отсутствует) и предсказание на train:
 	`python3 main.py --num-epochs 2 --seed 137 --model-filename new_model.npz` 
 
